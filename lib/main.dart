@@ -1,7 +1,21 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_appauth/flutter_appauth.dart';
+import 'package:meta/meta.dart';
+import 'package:flutter_web_auth/flutter_web_auth.dart';
+import 'package:oauth2/oauth2.dart' as oauth2;
+import 'package:url_launcher/url_launcher.dart';
+import 'package:uni_links/uni_links.dart';
+import 'package:webview_flutter/webview_flutter.dart';
+
+final authorizationEndpoint = 'https://login.eveonline.com/v2/oauth/authorize';
+final tokenEndpoint = 'https://login.eveonline.com/v2/oauth/token';
+final clientId = '3f6333510f7142a2999ede7c4c469b0f';
+final secret = 'MwYjfNkToO7KgB5OeB7G4GOGKr4sHRIG393dmtps';
+final redirectUrl = 'eveauth.flutter.test://callback';
 
 void main() {
   runApp(MyApp());
@@ -36,16 +50,6 @@ class MyApp extends StatelessWidget {
 
 class MyHomePage extends StatefulWidget {
   MyHomePage({Key key, this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
   final String title;
 
   @override
@@ -53,74 +57,63 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() async {
-      await authorize();
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
-        ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          TextButton(
+            onPressed: () => authorizeFlutterAppAuth().then((t) {
+              var test = t;
+            }),
+            child: Text("Flutter appauth"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.push(
+                context, MaterialPageRoute(builder: (context) => LoginPage())),
+            child: Text("Flutter oauth2 scratch"),
+          ),
+          TextButton(
+            onPressed: () => authorizeoAuth2().then((t) {
+              var test = t;
+            }),
+            child: Text("Flutter webauth"),
+          )
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
 
-Future<String> authorize() async {
+Future<String> authorizeoAuth2() async {
+  var grant = oauth2.AuthorizationCodeGrant(
+    clientId,
+    Uri.parse(authorizationEndpoint),
+    Uri.parse(tokenEndpoint),
+    secret: secret,
+  );
+
+  var authorizationUrl = grant.getAuthorizationUrl(Uri.parse(redirectUrl),
+      state: "fe9e61ce-2ad3-4af8-8ab9-13c35506cec4");
+  await redirect(authorizationUrl);
+  var responseUrl = await listen(Uri.parse(redirectUrl));
+}
+
+Future<void> redirect(Uri url) async {
+  await launch(url.toString());
+}
+
+Future<void> listen(Uri url) async {
+  print(url);
+  if (url.toString().contains("code")) print(true);
+}
+
+Future<String> authorizeFlutterAppAuth() async {
   final FlutterAppAuth appAuth = FlutterAppAuth();
   final AuthorizationTokenResponse result =
       await appAuth.authorizeAndExchangeCode(
@@ -131,8 +124,8 @@ Future<String> authorize() async {
       serviceConfiguration: serviceConfiguration(),
     ),
   );
-  final idToken = parseIdToken(result.idToken);
-  var test = result;
+  var test = result.accessToken;
+  print("Flutter APP AUTH - ACCESS TOKEN : $test");
 }
 
 AuthorizationServiceConfiguration serviceConfiguration() {
@@ -141,10 +134,78 @@ AuthorizationServiceConfiguration serviceConfiguration() {
       "https://login.eveonline.com/v2/oauth/token");
 }
 
-Map<String, dynamic> parseIdToken(String idToken) {
-  final parts = idToken.split(r'.');
-  assert(parts.length == 3);
+Future<String> authorizeFlutterWebAuth() async {
+  final url = Uri.https('login.eveonline.com', '/v2/oauth/authorize', {
+    'response_type': 'code',
+    'client_id': clientId,
+    'secret': secret,
+    'redirect_uri': '$redirectUrl://callback',
+    'state': 'fe9e61ce-2ad3-4af8-8ab9-13c35506cec4',
+    //https://login.eveonline.com/account/characterselection?state=18643f4a-8693-4b12-8f18-4b91a4f8235c
+  });
+  final result = await FlutterWebAuth.authenticate(
+    url: url.toString(),
+    callbackUrlScheme: redirectUrl,
+  );
 
-  return jsonDecode(
-      utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+  final code = Uri.parse(result).queryParameters['code'];
+  var test = Uri.parse(result);
 }
+
+class LoginPage extends StatefulWidget {
+  LoginPage({Key key, this.title}) : super(key: key);
+
+  final String title;
+
+  @override
+  _LoginPageState createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  oauth2.AuthorizationCodeGrant grant;
+  oauth2.Client _client;
+  final Completer<WebViewController> _controller =
+      Completer<WebViewController>();
+  Uri _uri;
+
+  @override
+  void initState() {
+    super.initState();
+    grant = oauth2.AuthorizationCodeGrant(
+        clientId, Uri.parse(authorizationEndpoint), Uri.parse(tokenEndpoint),
+        secret: secret);
+    _uri = grant.getAuthorizationUrl(Uri.parse(redirectUrl),
+        state: "fe9e61ce-2ad3-4af8-8ab9-13c35506cec4");
+    if (Platform.isAndroid) WebView.platform = SurfaceAndroidWebView();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Webview'),
+      ),
+      body: Builder(builder: (BuildContext context) {
+        return WebView(
+          javascriptMode: JavascriptMode.unrestricted,
+          initialUrl: _uri.toString(),
+          navigationDelegate: (navReq) {
+            if (navReq.url.startsWith(redirectUrl)) {
+              print(
+                  ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${Uri.parse(navReq.url)}");
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => MyApp()),
+              );
+              return NavigationDecision.prevent;
+            }
+            return NavigationDecision.navigate;
+          },
+        );
+      }),
+    );
+  }
+}
+
+Uri addQueryParameters(Uri url, Map<String, String> parameters) => url.replace(
+    queryParameters: new Map.from(url.queryParameters)..addAll(parameters));
