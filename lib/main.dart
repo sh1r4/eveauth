@@ -190,9 +190,9 @@ class _LoginPageState extends State<LoginPage> {
           javascriptMode: JavascriptMode.unrestricted,
           initialUrl: _uri.toString(),
           navigationDelegate: (navReq) {
+            print(
+                ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${Uri.parse(navReq.url)}");
             if (navReq.url.startsWith(redirectUrl)) {
-              print(
-                  ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ${Uri.parse(navReq.url)}");
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => MyApp()),
